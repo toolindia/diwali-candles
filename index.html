@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Happy Diwali - 3D Interactive Flipbook</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700;900&family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Font Awesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        body {
+            font-family: 'Poppins', sans-serif;
+            background: radial-gradient(circle at center, #2c0b0e 0%, #120405 100%);
+            color: #fef08a;
+            overflow-x: hidden;
+        }
+        .cinzel-font {
+            font-family: 'Cinzel Decorative', cursive;
+        }
+        
+        /* Custom 3D Book Styles */
+        .book-container {
+            perspective: 2000px;
+            transform-style: preserve-3d;
+        }
+
+        .book {
+            position: relative;
+            width: 100%;
+            max-width: 960px;
+            aspect-ratio: 16 / 9;
+            margin: 0 auto;
+            transform-style: preserve-3d;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7), 0 0 40px rgba(234, 179, 8, 0.2);
+            border-radius: 8px;
+            background: #111;
+        }
+
+        .page {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            top: 0;
+            left: 0;
+            transform-style: preserve-3d;
+            transform-origin: left center;
+            transition: transform 0.9s cubic-bezier(0.645, 0.045, 0.355, 1);
+            pointer-events: none;
+            will-change: transform;
+        }
+
+        .page.interactive {
+            pointer-events: auto;
+        }
+
+        .page-face {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            top: 0;
+            left: 0;
+            backface-visibility: hidden;
+            -webkit-backface-visibility: hidden;
+            overflow: hidden;
+            background: #1a0809;
+            border-radius: 4px;
+        }
+
+        .page-face.front {
+            z-index: 2;
+        }
+
+        .page-face.back {
+            transform: rotateY(180deg);
+            z-index: 1;
+        }
+
+        .page.flipped {
+            transform: rotateY(-180deg);
+        }
+
+        /* Ambient glow & shadows */
+        .page-shadow {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 3;
+            pointer-events: none;
+            transition: opacity 0.9s ease;
+        }
+
+        .flipped .page-shadow-front {
+            opacity: 0.8;
+            background: linear-gradient(to right, rgba(0,0,0,0.6) 0%, rgba(0,0,0,0) 20%);
+        }
+
+        /* Sparkle animation */
+        @keyframes sparkle {
+            0%, 100% { opacity: 0.2; transform: scale(0.8); }
+            50% { opacity: 1; transform: scale(1.2); }
+        }
+
+        .sparkle {
+            animation: sparkle 3s infinite ease-in-out;
+        }
+
+        /* Floating Diyas animation */
+        @keyframes floatSlow {
+            0%, 100% { transform: translateY(0px) rotate(0deg); }
+            50% { transform: translateY(-10px) rotate(2deg); }
+        }
+        .floating {
+            animation: floatSlow 4s infinite ease-in-out;
+        }
+
+        /* Custom scrollbar for modals/thumbnails */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1a0809;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #ca8a04;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body class="h-full flex flex-col justify-between select-none relative">
+
+    <!-- Background Particle Canvas for Sparkles & Fireworks -->
+    <canvas id="fxCanvas" class="absolute inset-0 pointer-events-none z-0"></canvas>
+
+    <!-- Header / Navbar -->
+    <header class="relative z-10 w-full py-4 px-6 flex flex-wrap justify-between items-center bg-black/40 backdrop-blur-md border-b border-amber-500/20">
+        <div class="flex items-center space-x-3">
+            <div class="w-10 h-10 rounded-full bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center shadow-lg shadow-amber-500/30">
+                <i class="fa-solid fa-fire-flame-curved text-amber-950 text-xl"></i>
+            </div>
+            <div>
+                <h1 class="cinzel-font text-xl md:text-2xl font-bold bg-gradient-to-r from-amber-200 via-amber-400 to-yellow-200 bg-clip-text text-transparent">
+                    Diwali Utsav 2026
+                </h1>
+                <p class="text-xs text-amber-300/70">Festival of Lights Interactive Flipbook</p>
+            </div>
+        </div>
+
+        <!-- Top Controls / Status -->
+        <div class="flex items-center space-x-2 md:space-x-4 mt-2 sm:mt-0">
+            <button id="soundToggleBtn" onclick="toggleSound()" class="px-3 py-1.5 rounded-full bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs md:text-sm font-medium transition flex items-center space-x-2">
+                <i id="soundIcon" class="fa-solid fa-volume-high"></i>
+                <span id="soundText" class="hidden sm:inline">Audio On</span>
+            </button>
+            <button onclick="toggleLoopMode()" id="loopBtn" class="px-3 py-1.5 rounded-full bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-500/40 text-xs md:text-sm font-medium transition flex items-center space-x-2 shadow-sm">
+                <i class="fa-solid fa-infinity"></i>
+                <span>Infinite Loop: <strong id="loopStatus">ON</strong></span>
+            </button>
+            <button onclick="toggleThumbnails()" class="px-3 py-1.5 rounded-full bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs md:text-sm font-medium transition flex items-center space-x-2">
+                <i class="fa-solid fa-grip"></i>
+                <span class="hidden sm:inline">Pages</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Flipbook Stage -->
+    <main class="relative z-10 flex-1 flex flex-col items-center justify-center p-4 md:p-8">
+        
+        <!-- Book Container -->
+        <div class="book-container w-full max-w-5xl px-2 sm:px-6">
+            <div id="book" class="book">
+                <!-- Pages will be dynamically generated by JS -->
+            </div>
+        </div>
+
+        <!-- Page Indicator & Quick Jump -->
+        <div class="mt-6 flex items-center space-x-4 bg-black/60 backdrop-blur-md px-6 py-2.5 rounded-full border border-amber-500/30 shadow-xl">
+            <span id="pageIndicator" class="text-xs md:text-sm font-medium text-amber-200 tracking-wider">
+                Cover Page
+            </span>
+            <input type="range" id="pageSlider" min="0" max="34" value="0" 
+                class="w-32 md:w-48 accent-amber-500 cursor-pointer" oninput="jumpToPage(parseInt(this.value))">
+        </div>
+    </main>
+
+    <!-- Bottom Navigation Bar -->
+    <footer class="relative z-10 w-full py-4 px-6 flex justify-center items-center space-x-4 bg-black/50 backdrop-blur-md border-t border-amber-500/20">
+        <button onclick="prevPage()" class="group px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-amber-950 font-bold shadow-lg shadow-amber-600/30 transition transform active:scale-95 flex items-center space-x-2">
+            <i class="fa-solid fa-chevron-left"></i>
+            <span>Previous</span>
+        </button>
+
+        <button id="autoPlayBtn" onclick="toggleAutoPlay()" class="px-5 py-2.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-500/40 font-semibold transition flex items-center space-x-2">
+            <i id="autoPlayIcon" class="fa-solid fa-play"></i>
+            <span id="autoPlayText">Auto Play</span>
+        </button>
+
+        <button onclick="nextPage()" class="group px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-amber-950 font-bold shadow-lg shadow-amber-600/30 transition transform active:scale-95 flex items-center space-x-2">
+            <span>Next</span>
+            <i class="fa-solid fa-chevron-right"></i>
+        </button>
+    </footer>
+
+    <!-- Thumbnail Modal / Drawer -->
+    <div id="thumbModal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-lg hidden flex flex-col p-6 animate-fadeIn">
+        <div class="flex justify-between items-center mb-6 border-b border-amber-500/20 pb-4">
+            <h2 class="cinzel-font text-xl md:text-2xl text-amber-300 font-bold">Diwali Book Index & Pages</h2>
+            <button onclick="toggleThumbnails()" class="w-10 h-10 rounded-full bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 flex items-center justify-center transition">
+                <i class="fa-solid fa-xmark text-lg"></i>
+            </button>
+        </div>
+        <div id="thumbGrid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 overflow-y-auto flex-1 pr-2">
+            <!-- Thumbnails inserted dynamically -->
+        </div>
+    </div>
+
+    <!-- Script Logic -->
+    <script>
+        // List of all 34 Images in exact order
+        const imageUrls = [
+            "https://i.ibb.co/TB2Yc898/1.png",
+            "https://i.ibb.co/HfrS032r/2.png",
+            "https://i.ibb.co/mVVyRrHX/3.png",
+            "https://i.ibb.co/21ZpFyyj/4.png",
+            "https://i.ibb.co/23WNYf98/5.png",
+            "https://i.ibb.co/chq1RF4D/6.png",
+            "https://i.ibb.co/5g5Csx1w/7.png",
+            "https://i.ibb.co/fV3Kk5Mb/8.png",
+            "https://i.ibb.co/S4TWZcqQ/9.png",
+            "https://i.ibb.co/bphRLXn/10.png",
+            "https://i.ibb.co/LXVpfkGt/11.png",
+            "https://i.ibb.co/Ps8D0W8y/12.png",
+            "https://i.ibb.co/HTzYbb2h/13.png",
+            "https://i.ibb.co/DP1S67Lp/14.png",
+            "https://i.ibb.co/v4yrMrYq/15.png",
+            "https://i.ibb.co/dJtYxt5m/16.png",
+            "https://i.ibb.co/WNQz8LQs/17.png",
+            "https://i.ibb.co/7dgq4SD3/18.png",
+            "https://i.ibb.co/F47F7Bnk/19-1.png",
+            "https://i.ibb.co/Z6gLvTZr/20.png",
+            "https://i.ibb.co/wZD9qZVd/21.png",
+            "https://i.ibb.co/PSXgGPJ/22.png",
+            "https://i.ibb.co/DfjLxhgG/23.png",
+            "https://i.ibb.co/gZhstsZQ/24.png",
+            "https://i.ibb.co/v4FtN6f1/25.png",
+            "https://i.ibb.co/0jvZQ6qh/26.png",
+            "https://i.ibb.co/sv4Tps57/27.png",
+            "https://i.ibb.co/XZX6Rd8q/28.png",
+            "https://i.ibb.co/0VDsHbQB/29.png",
+            "https://i.ibb.co/Kp7z863S/30.png",
+            "https://i.ibb.co/ZzFwp7DY/31.png",
+            "https://i.ibb.co/21RwfXQT/32.png",
+            "https://i.ibb.co/mndgrkP/33.png",
+            "https://i.ibb.co/ccsbRXtF/34.png"
+        ];
+
+        let currentPage = 0; // 0 is Front Cover, 1 to 34 are images
+        const totalPages = imageUrls.length; // 34 images -> total states 0 to 34 (35 states)
+        let infiniteLoop = true;
+        let isAutoPlaying = false;
+        let autoPlayInterval = null;
+        let soundEnabled = true;
+
+        // Web Audio API for rustling page turn & ambient chimes
+        let audioCtx = null;
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+        }
+
+        function playPageTurnSound() {
+            if (!soundEnabled) return;
+            try {
+                initAudio();
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+
+                // White noise burst for paper rustle
+                const bufferSize = audioCtx.sampleRate * 0.25;
+                const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+                const data = buffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) {
+                    data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / bufferSize, 2);
+                }
+
+                const noise = audioCtx.createBufferSource();
+                noise.buffer = buffer;
+
+                const filter = audioCtx.createBiquadFilter();
+                filter.type = 'bandpass';
+                filter.frequency.value = 1200;
+                filter.Q.value = 3;
+
+                const gain = audioCtx.createGain();
+                gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.25);
+
+                noise.connect(filter);
+                filter.connect(gain);
+                gain.connect(audioCtx.destination);
+
+                noise.start();
+            } catch (e) {
+                console.log("Audio not allowed yet");
+            }
+        }
+
+        function toggleSound() {
+            soundEnabled = !soundEnabled;
+            const icon = document.getElementById('soundIcon');
+            const text = document.getElementById('soundText');
+            if (soundEnabled) {
+                icon.className = "fa-solid fa-volume-high";
+                text.innerText = "Audio On";
+            } else {
+                icon.className = "fa-solid fa-volume-xmark";
+                text.innerText = "Audio Off";
+            }
+        }
+
+        // Build Book DOM structure
+        function buildBook() {
+            const bookEl = document.getElementById('book');
+            bookEl.innerHTML = '';
+
+            // We create 35 structural leaf layers (Index 0 is Front Cover, 1-34 are image pages)
+            // Each page turns over.
+            // Let's structure leaf elements:
+            // Leaf 0: Front Cover (front) vs Image 1 (back)
+            // Leaf i: Image i (front) vs Image i+1 (back)
+            
+            // Actually, let's build interactive leaf elements from cover up to page 34
+            // Total visual layers = 35 states (0 to 34).
+            // Let's create leaf components carefully.
+            
+            for (let i = 0; i <= totalPages; i++) {
+                const pageDiv = document.createElement('div');
+                pageDiv.className = `page ${i < currentPage ? 'flipped' : ''}`;
+                pageDiv.style.zIndex = totalPages - i;
+                pageDiv.id = `page-${i}`;
+
+                // Front Face
+                const frontFace = document.createElement('div');
+                frontFace.className = `page-face front ${i === 0 ? 'cover-bg' : ''}`;
+                
+                if (i === 0) {
+                    // Gorgeous Diwali Front Cover
+                    frontFace.innerHTML = `
+                        <div class="w-full h-full bg-gradient-to-br from-red-950 via-amber-950 to-neutral-950 p-8 flex flex-col justify-between items-center text-center relative border-4 border-amber-500/40 rounded-lg shadow-2xl overflow-hidden">
+                            <!-- Decorative Rangoli corner elements -->
+                            <div class="absolute top-3 left-3 text-amber-400/40 text-2xl"><i class="fa-solid fa-dharmachakra sparkle"></i></div>
+                            <div class="absolute top-3 right-3 text-amber-400/40 text-2xl"><i class="fa-solid fa-dharmachakra sparkle"></i></div>
+                            <div class="absolute bottom-3 left-3 text-amber-400/40 text-2xl"><i class="fa-solid fa-dharmachakra sparkle"></i></div>
+                            <div class="absolute bottom-3 right-3 text-amber-400/40 text-2xl"><i class="fa-solid fa-dharmachakra sparkle"></i></div>
+
+                            <div class="mt-4 z-10">
+                                <span class="text-amber-400 text-xs md:text-sm tracking-widest uppercase font-semibold bg-amber-500/10 px-4 py-1.5 rounded-full border border-amber-500/30">
+                                    ✨ Shubh Deepawali ✨
+                                </span>
+                            </div>
+
+                            <div class="z-10 my-auto py-4">
+                                <h1 class="cinzel-font text-4xl sm:text-6xl md:text-7xl font-black bg-gradient-to-b from-yellow-100 via-amber-300 to-amber-500 bg-clip-text text-transparent drop-shadow-[0_5px_15px_rgba(245,158,11,0.5)]">
+                                    HAPPY DIWALI
+                                </h1>
+                                <p class="mt-3 text-amber-200/90 text-sm md:text-lg font-light tracking-wide italic">
+                                    May the festival of lights fill your life with joy & prosperity
+                                </p>
+
+                                <div class="mt-6 flex justify-center items-center space-x-6 text-amber-400 text-2xl md:text-3xl">
+                                    <i class="fa-solid fa-fire-flame-curved floating" style="animation-delay: 0s;"></i>
+                                    <i class="fa-solid fa-star sparkle" style="animation-delay: 0.5s;"></i>
+                                    <i class="fa-solid fa-fire-flame-curved floating" style="animation-delay: 1s;"></i>
+                                </div>
+                            </div>
+
+                            <div class="z-10 mb-2 flex items-center space-x-2 bg-amber-500/20 px-6 py-2 rounded-full border border-amber-500/40 text-amber-200 text-xs md:text-sm animate-pulse">
+                                <span>Click or Swipe to Open Book</span>
+                                <i class="fa-solid fa-arrow-right"></i>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    // Image Pages (1 to 34)
+                    const imgUrl = imageUrls[i - 1];
+                    frontFace.innerHTML = `
+                        <div class="w-full h-full bg-neutral-900 flex items-center justify-center relative overflow-hidden">
+                            <img src="${imgUrl}" alt="Diwali Page ${i}" class="w-full h-full object-contain shadow-inner" onerror="this.src='https://placehold.co/960x540/2c0b0e/fef08a?text=Diwali+Page+${i}'">
+                            <div class="absolute bottom-3 right-4 bg-black/70 backdrop-blur-md px-3 py-1 rounded-md text-amber-300 text-xs font-mono border border-amber-500/20">
+                                ${i} / ${totalPages}
+                            </div>
+                        </div>
+                    `;
+                }
+
+                // Back Face
+                const backFace = document.createElement('div');
+                backFace.className = `page-face back`;
+                if (i < totalPages) {
+                    const backImgUrl = imageUrls[i];
+                    backFace.innerHTML = `
+                        <div class="w-full h-full bg-neutral-900 flex items-center justify-center relative overflow-hidden">
+                            <img src="${backImgUrl}" alt="Diwali Page ${i + 1}" class="w-full h-full object-contain shadow-inner" onerror="this.src='https://placehold.co/960x540/2c0b0e/fef08a?text=Diwali+Page+${i+1}'">
+                            <div class="absolute bottom-3 left-4 bg-black/70 backdrop-blur-md px-3 py-1 rounded-md text-amber-300 text-xs font-mono border border-amber-500/20">
+                                ${i + 1} / ${totalPages}
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    // Inside back cover or final page
+                    backFace.innerHTML = `
+                        <div class="w-full h-full bg-gradient-to-br from-neutral-950 via-amber-950 to-red-950 p-8 flex flex-col justify-center items-center text-center border-4 border-amber-500/40 rounded-lg">
+                            <h2 class="cinzel-font text-3xl md:text-5xl font-bold text-amber-300 mb-4">Shubh Deepawali</h2>
+                            <p class="text-amber-200/80 text-sm md:text-base max-w-md">Thank you for celebrating with us. May Goddess Lakshmi and Lord Ganesha bless your home with eternal light and happiness.</p>
+                            <div class="mt-6 text-amber-400 text-3xl"><i class="fa-solid fa-fire-flame-curved floating"></i></div>
+                        </div>
+                    `;
+                }
+
+                // Page shadow for 3D depth
+                const shadow = document.createElement('div');
+                shadow.className = 'page-shadow page-shadow-front';
+
+                pageDiv.appendChild(frontFace);
+                pageDiv.appendChild(backFace);
+                pageDiv.appendChild(shadow);
+
+                // Click event to flip page forward when clicking right side, or backward when clicking left side
+                pageDiv.addEventListener('click', (e) => {
+                    const rect = pageDiv.getBoundingClientRect();
+                    const clickX = e.clientX - rect.left;
+                    if (clickX > rect.width / 2) {
+                        if (i === currentPage) nextPage();
+                    } else {
+                        if (i === currentPage - 1) prevPage();
+                    }
+                });
+
+                bookEl.appendChild(pageDiv);
+            }
+
+            updateBookState();
+            buildThumbnails();
+        }
+
+        function updateBookState() {
+            for (let i = 0; i <= totalPages; i++) {
+                const pageEl = document.getElementById(`page-${i}`);
+                if (!pageEl) continue;
+                if (i < currentPage) {
+                    pageEl.classList.add('flipped');
+                    pageEl.style.zIndex = i + 1;
+                } else {
+                    pageEl.classList.remove('flipped');
+                    pageEl.style.zIndex = totalPages - i;
+                }
+            }
+
+            // Update Page Indicator & Slider
+            const indicator = document.getElementById('pageIndicator');
+            if (currentPage === 0) {
+                indicator.innerText = "Front Cover: Happy Diwali";
+            } else {
+                indicator.innerText = `Page ${currentPage} of ${totalPages}`;
+            }
+            document.getElementById('pageSlider').value = currentPage;
+        }
+
+        function nextPage() {
+            if (currentPage < totalPages) {
+                currentPage++;
+                playPageTurnSound();
+                updateBookState();
+            } else if (infiniteLoop) {
+                // Loop back to cover
+                currentPage = 0;
+                playPageTurnSound();
+                updateBookState();
+            }
+        }
+
+        function prevPage() {
+            if (currentPage > 0) {
+                currentPage--;
+                playPageTurnSound();
+                updateBookState();
+            } else if (infiniteLoop) {
+                // Loop to end
+                currentPage = totalPages;
+                playPageTurnSound();
+                updateBookState();
+            }
+        }
+
+        function jumpToPage(targetPage) {
+            currentPage = Math.max(0, Math.min(totalPages, targetPage));
+            playPageTurnSound();
+            updateBookState();
+        }
+
+        function toggleLoopMode() {
+            infiniteLoop = !infiniteLoop;
+            document.getElementById('loopStatus').innerText = infiniteLoop ? "ON" : "OFF";
+            document.getElementById('loopBtn').classList.toggle('bg-amber-500/20', infiniteLoop);
+            document.getElementById('loopBtn').classList.toggle('bg-neutral-800', !infiniteLoop);
+        }
+
+        function toggleAutoPlay() {
+            isAutoPlaying = !isAutoPlaying;
+            const icon = document.getElementById('autoPlayIcon');
+            const text = document.getElementById('autoPlayText');
+            const btn = document.getElementById('autoPlayBtn');
+
+            if (isAutoPlaying) {
+                icon.className = "fa-solid fa-pause";
+                text.innerText = "Pause";
+                btn.classList.add('bg-amber-500/40', 'border-amber-400');
+                autoPlayInterval = setInterval(() => {
+                    if (currentPage >= totalPages) {
+                        if (infiniteLoop) {
+                            currentPage = 0;
+                            updateBookState();
+                        } else {
+                            toggleAutoPlay();
+                        }
+                    } else {
+                        nextPage();
+                    }
+                }, 3500);
+            } else {
+                icon.className = "fa-solid fa-play";
+                text.innerText = "Auto Play";
+                btn.classList.remove('bg-amber-500/40', 'border-amber-400');
+                clearInterval(autoPlayInterval);
+            }
+        }
+
+        function toggleThumbnails() {
+            const modal = document.getElementById('thumbModal');
+            modal.classList.toggle('hidden');
+        }
+
+        function buildThumbnails() {
+            const grid = document.getElementById('thumbGrid');
+            grid.innerHTML = '';
+
+            // Cover thumbnail
+            const coverThumb = document.createElement('div');
+            coverThumb.className = `cursor-pointer rounded-lg overflow-hidden border-2 transition transform hover:scale-105 p-2 bg-neutral-900 text-center flex flex-col justify-between ${currentPage === 0 ? 'border-amber-400 shadow-lg shadow-amber-500/30' : 'border-amber-500/20'}`;
+            coverThumb.innerHTML = `
+                <div class="h-20 bg-gradient-to-br from-red-950 to-amber-950 flex items-center justify-center rounded text-amber-300 cinzel-font text-xs font-bold p-1">
+                    Happy Diwali Cover
+                </div>
+                <span class="text-xs text-amber-200 mt-1 font-medium">Cover</span>
+            `;
+            coverThumb.onclick = () => {
+                jumpToPage(0);
+                toggleThumbnails();
+            };
+            grid.appendChild(coverThumb);
+
+            // Image thumbnails
+            imageUrls.forEach((url, idx) => {
+                const pageNum = idx + 1;
+                const thumb = document.createElement('div');
+                thumb.className = `cursor-pointer rounded-lg overflow-hidden border-2 transition transform hover:scale-105 p-1 bg-neutral-900 text-center ${currentPage === pageNum ? 'border-amber-400 shadow-lg shadow-amber-500/30' : 'border-amber-500/20'}`;
+                thumb.innerHTML = `
+                    <div class="w-full aspect-video bg-black rounded overflow-hidden">
+                        <img src="${url}" class="w-full h-full object-cover" onerror="this.src='https://placehold.co/160x90/2c0b0e/fef08a?text=${pageNum}'">
+                    </div>
+                    <span class="text-xs text-amber-200 mt-1 block font-medium">Page ${pageNum}</span>
+                `;
+                thumb.onclick = () => {
+                    jumpToPage(pageNum);
+                    toggleThumbnails();
+                };
+                grid.appendChild(thumb);
+            });
+        }
+
+        // Particle Canvas Animation (Sparkles & Firework embers)
+        const canvas = document.getElementById('fxCanvas');
+        const ctx = canvas.getContext('2d');
+        let particles = [];
+
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        class Particle {
+            constructor() {
+                this.reset();
+            }
+            reset() {
+                this.x = Math.random() * canvas.width;
+                this.y = Math.random() * canvas.height;
+                this.size = Math.random() * 3 + 1;
+                this.speedX = (Math.random() - 0.5) * 0.6;
+                this.speedY = -Math.random() * 1.2 - 0.3;
+                this.color = Math.random() > 0.3 ? '#fef08a' : '#f59e0b';
+                this.alpha = Math.random() * 0.7 + 0.3;
+                this.decay = Math.random() * 0.005 + 0.002;
+            }
+            update() {
+                this.x += this.speedX;
+                this.y += this.speedY;
+                this.alpha -= this.decay;
+                if (this.alpha <= 0 || this.y < 0) {
+                    this.reset();
+                    this.y = canvas.height + 10;
+                }
+            }
+            draw() {
+                ctx.save();
+                ctx.globalAlpha = this.alpha;
+                ctx.fillStyle = this.color;
+                ctx.shadowBlur = 8;
+                ctx.shadowColor = this.color;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+
+        for (let i = 0; i < 60; i++) {
+            particles.push(new Particle());
+        }
+
+        function animateFX() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            particles.forEach(p => {
+                p.update();
+                p.draw();
+            });
+            requestAnimationFrame(animateFX);
+        }
+
+        // Keyboard navigation
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowRight' || e.key === 'PageDown') {
+                nextPage();
+            } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+                prevPage();
+            }
+        });
+
+        // Initialize on load
+        window.onload = function() {
+            buildBook();
+            animateFX();
+        };
+    </script>
+</body>
+</html>
